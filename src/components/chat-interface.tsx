@@ -1,34 +1,28 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
-import { useRef } from "react";
-import { Bot, Paperclip, Send, PlusIcon } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { readStreamableValue } from '@ai-sdk/rsc';
+import { generateChatResponse } from "@/actions/chat";
+import { nanoid } from "nanoid";
+import { Bot } from "lucide-react";
 import { toast } from "sonner";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-    PromptInput,
-    PromptInputAttachments,
-} from "@/components/ai-elements/prompt-input";
-import { PromptInputActionAddAttachments } from "@/components/ai-elements/prompt-input";
-import { InputGroupTextarea, InputGroupButton } from "@/components/ui/input-group";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import CustomPromptInput from "./custom-input";
 
 export function ChatInterface() {
-    const { messages, status, sendMessage } = useChat({
-        transport: new DefaultChatTransport({ api: "/api/chat" }),
-        onError: (error) => {
-            toast.error("Failed to send message: " + error.message);
-        },
-        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses
+    const [messages, setMessages] = useState<any[]>([]);
+    const [status, setStatus] = useState<"ready" | "submitted" | "streaming" | "error">("ready");
+
+    // Scroll to bottom when messages change
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
     });
 
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -36,9 +30,9 @@ export function ChatInterface() {
     const onSubmit = async (message: { text: string; files: any[] }, e: any) => {
         if (!message.text.trim() && message.files.length === 0) return;
 
+        // 1. Handle File Uploads (same as before)
         if (message.files.length > 0) {
             const formData = new FormData();
-
             for (const file of message.files) {
                 if (file.url) {
                     const response = await fetch(file.url);
@@ -46,26 +40,43 @@ export function ChatInterface() {
                     formData.append("files", blob, file.filename || "attachment.pdf");
                 }
             }
-
-            const uploadPromise = fetch("/api/upload", {
-                method: "POST",
-                body: formData,
-            });
-
-            toast.promise(uploadPromise, {
-                loading: "Uploading and processing files...",
-                success: "Files processed. Generating response...",
-                error: "Failed to upload files",
-            });
-
-            await uploadPromise;
+            await fetch("/api/upload", { method: "POST", body: formData });
+            // TODO: Add success toast or error handling
         }
 
-        await sendMessage({ text: message.text });
+        // 2. Add User Message
+        const userMessage = { role: 'user', content: message.text, id: nanoid() };
+        setMessages(curr => [...curr, userMessage]);
+        setStatus("submitted");
+
+        try {
+            // 3. Call Server Action
+            const { output } = await generateChatResponse(message.text, messages);
+
+            // 4. Stream Response
+            setStatus("streaming");
+            let aiMessageContent = "";
+            const aiMessageId = nanoid();
+
+            // Add initial AI message placeholder
+            setMessages(curr => [...curr, { role: 'assistant', content: '', id: aiMessageId }]);
+
+            for await (const delta of readStreamableValue(output)) {
+                aiMessageContent += delta;
+                setMessages(curr => curr.map(m =>
+                    m.id === aiMessageId ? { ...m, content: aiMessageContent } : m
+                ));
+            }
+            setStatus("ready");
+        } catch (error) {
+            console.error(error);
+            setStatus("error");
+            toast.error("Failed to generate response");
+        }
     };
 
+    const isLoading = status === "streaming" || status === "submitted";
     const isEmpty = messages.length === 0;
-    const isLoading = status == "streaming" || status == "submitted"
 
     return (
         <div className="flex flex-col h-full w-full max-w-4xl mx-auto">
@@ -86,44 +97,68 @@ export function ChatInterface() {
                 ) : (
                     <ScrollArea className="h-full px-4 py-6">
                         <div className="space-y-6 pb-20">
-                            {messages.map((m) => (
-                                <div
-                                    key={m.id}
-                                    className={cn(
-                                        "flex gap-4 w-full max-w-3xl mx-auto",
-                                        m.role === "user" ? "justify-end" : "justify-start"
-                                    )}
-                                >
-                                    {m.role !== "user" && (
-                                        <Avatar className="size-8 mt-1 border">
-                                            <AvatarFallback>AI</AvatarFallback>
-                                            <AvatarImage src="/goku.svg" />
-                                        </Avatar>
-                                    )}
+                            {messages.map((m) => {
+                                console.log(`Rendering message ${m.id} (${m.role}):`, m);
+                                return (
+                                    <div
+                                        key={m.id}
+                                        className={cn(
+                                            "flex gap-4 w-full max-w-3xl mx-auto",
+                                            m.role === "user" ? "justify-end" : "justify-start"
+                                        )}
+                                    >
+                                        {m.role !== "user" && (
+                                            <Avatar className="size-8 mt-1 border">
+                                                <AvatarFallback>AI</AvatarFallback>
+                                                <AvatarImage src="/goku.svg" />
+                                            </Avatar>
+                                        )}
 
-                                    <div className={cn(
-                                        "flex flex-col max-w-[80%]",
-                                        m.role === "user" ? "items-end" : "items-start"
-                                    )}>
-                                        <div
-                                            className={cn(
-                                                "rounded-2xl px-4 py-2.5 text-sm",
-                                                m.role === "user"
-                                                    ? "bg-primary text-primary-foreground rounded-br-none"
-                                                    : "bg-muted text-foreground rounded-bl-none"
-                                            )}
-                                        >
-                                            {m.parts[0].type == "text" ? m.parts[0].text : ""}
+                                        <div className={cn(
+                                            "flex flex-col max-w-[80%]",
+                                            m.role === "user" ? "items-end" : "items-start"
+                                        )}>
+                                            <div
+                                                className={cn(
+                                                    "rounded-2xl px-4 py-2.5 text-sm",
+                                                    m.role === "user"
+                                                        ? "bg-primary text-primary-foreground rounded-br-none"
+                                                        : "bg-muted text-foreground rounded-bl-none"
+                                                )}
+                                            >
+                                                <div className="prose dark:prose-invert prose-sm max-w-none break-words">
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        components={{
+                                                            pre: ({ node, ...props }: any) => (
+                                                                <div className="overflow-auto w-full my-2 bg-black/10 dark:bg-black/30 p-2 rounded-lg">
+                                                                    <pre {...props} />
+                                                                </div>
+                                                            ),
+                                                            code: ({ node, ...props }: any) => (
+                                                                <code className="bg-black/10 dark:bg-black/30 rounded-md px-1 py-0.5" {...props} />
+                                                            )
+                                                        }}
+                                                    >
+                                                        {(m as any).content
+                                                            ? (m as any).content
+                                                            : (m.parts && m.parts.length > 0 && m.parts[0].type === "text"
+                                                                ? m.parts[0].text
+                                                                : "")}
+                                                    </ReactMarkdown>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {m.role === "user" && (
-                                        <Avatar className="size-8 mt-1 border">
-                                            <AvatarFallback>ME</AvatarFallback>
-                                        </Avatar>
-                                    )}
-                                </div>
-                            ))}
+                                        {m.role === "user" && (
+                                            <Avatar className="size-8 mt-1 border">
+                                                <AvatarFallback>ME</AvatarFallback>
+                                            </Avatar>
+                                        )}
+                                    </div>
+                                )
+                            }
+                            )}
                             {isLoading && (
                                 <div className="flex gap-4 w-full max-w-3xl mx-auto justify-start">
                                     <Avatar className="size-8 mt-1 border">
@@ -144,44 +179,12 @@ export function ChatInterface() {
             {/* Input Area */}
             <div className="p-4 bg-background">
                 <div className="max-w-3xl mx-auto">
-                    <PromptInput
-                        onSubmit={onSubmit}
-                        maxFiles={3}
-                        accept=".pdf"
-                        className="border rounded-xl shadow-sm bg-background overflow-hidden focus-within:ring-1 focus-within:ring-ring"
-                    >
-                        <PromptInputAttachments className="border-b bg-muted/30 px-3 py-2">
-                            {(file) => (
-                                <div key={file.id} className="flex items-center gap-2 text-xs bg-background border px-2 py-1 rounded-md">
-                                    <Paperclip className="size-3" />
-                                    <span className="truncate max-w-[100px]">{file.filename}</span>
-                                </div>
-                            )}
-                        </PromptInputAttachments>
-                        <div className="flex items-end gap-2 p-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <InputGroupButton size="icon-sm" className="shrink-0 rounded-full">
-                                        <PlusIcon className="size-4" />
-                                    </InputGroupButton>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                    <PromptInputActionAddAttachments />
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            <InputGroupTextarea
-                                name="message"
-                                placeholder="Ask a question regarding your documents..."
-                                className="min-h-[44px] max-h-[200px] py-3 text-base"
-                            />
-
-                            <Button type="submit" size="icon" className="shrink-0 rounded-full size-8 mb-0.5">
-                                <Send className="size-4" />
-                                <span className="sr-only">Send</span>
-                            </Button>
-                        </div>
-                    </PromptInput>
+                    <CustomPromptInput
+                        onSubmit={async (message) => {
+                            await onSubmit(message, undefined);
+                        }}
+                        isLoading={isLoading}
+                    />
                     <div className="text-center mt-2">
                         <p className="text-xs text-muted-foreground">
                             AI can make mistakes. Please verify important information.

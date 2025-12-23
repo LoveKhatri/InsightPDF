@@ -22,8 +22,29 @@ export async function POST(req: Request) {
         }
 
         const { messages } = await req.json();
+        console.log("Chat Messages:", JSON.stringify(messages));
         const lastMessage = messages[messages.length - 1];
-        const query = lastMessage.content;
+
+        let query = "";
+        if (Array.isArray(lastMessage.content)) {
+            query = lastMessage.content
+                .filter((part: any) => part.type === "text")
+                .map((part: any) => part.text)
+                .join("\n");
+        } else {
+            query = lastMessage.content;
+        }
+
+        console.log("Chat Query Input:", JSON.stringify(lastMessage.content));
+        console.log("Chat Query Parsed:", query);
+
+        if (!query) {
+            query = "Summarize the document";
+        }
+
+        if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+            console.error("GOOGLE_GENERATIVE_AI_API_KEY is missing!");
+        }
 
         // 1. Generate Embedding for Query
         const queryEmbedding = await geminiEmbeddings.embedQuery(query);
@@ -31,6 +52,7 @@ export async function POST(req: Request) {
         // 2. Retrieve Relevant Chunks (Strict Scoping)
         // Cosine distance: lower is better.
         const similarity = sql<number>`1 - (${embeddings.embedding} <=> ${JSON.stringify(queryEmbedding)})`;
+
 
         const chunks = await db
             .select({
@@ -46,17 +68,23 @@ export async function POST(req: Request) {
         // 3. Construct Context
         const context = chunks.map((chunk) => chunk.content).join("\n\n");
 
+
         // 4. Generate Response
         const result = streamText({
-            model: google("gemini-2.0-flash-exp"),
+            model: google("gemini-2.0-flash-lite"),
             messages,
             system: `You are a helpful assistant for InsightPDF. 
             Use the following context to answer the user's question. 
             If the answer is not in the context, say you don't know interactively.
             
             Context:
-            ${context}`,
+            ${context}
+            
+            Query:
+            ${query}`,
         });
+
+        console.log("Result:", result);
 
         return result.toTextStreamResponse();
 
