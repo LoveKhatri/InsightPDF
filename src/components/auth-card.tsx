@@ -12,19 +12,17 @@ import Link from "next/link";
 export default function AuthCard({
   title,
   description,
-  mode = "sign-in",
+  mode = "login",
 }: {
   title: string;
   description: string;
-  mode?: "sign-in" | "sign-up";
+  mode?: "login" | "signup";
 }) {
-  const [githubLoading, setGithubLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [discordLoading, setDiscordLoading] = useState(false);
 
   return (
     <Card className="max-w-md w-full rounded-none border-dashed">
-      <CardHeader>
+      <CardHeader className="text-center">
         <CardTitle className="text-lg md:text-xl">{title}</CardTitle>
         <CardDescription className="text-xs md:text-sm">{description}</CardDescription>
       </CardHeader>
@@ -35,14 +33,6 @@ export default function AuthCard({
             "justify-between flex-col"
           )}>
             <SignInButton
-              title="Sign in with Github"
-              provider="github"
-              loading={githubLoading}
-              setLoading={setGithubLoading}
-              callbackURL="/dashboard"
-              icon={<Icons.Github />}
-            />
-            <SignInButton
               title="Sign in with Google"
               provider="google"
               loading={googleLoading}
@@ -50,30 +40,22 @@ export default function AuthCard({
               callbackURL="/dashboard"
               icon={<Icons.Google />}
             />
-            <SignInButton
-              title="Sign in with Discord"
-              provider="discord"
-              loading={discordLoading}
-              setLoading={setDiscordLoading}
-              callbackURL="/dashboard"
-              icon={<Icons.Discord />}
-            />
           </div>
         </div>
       </CardContent>
-      <CardFooter className="flex justify-center border-t border-dashed pt-4">
+      <CardFooter className="flex justify-center border-t border-dashed pt-4 text-center">
         <p className="text-sm text-muted-foreground">
-          {mode === "sign-in" ? (
+          {mode === "login" ? (
             <>
               Don't have an account?{" "}
-              <Link href="/sign-up" className="text-primary font-medium hover:underline">
+              <Link href="/signup" className="text-primary font-medium hover:underline">
                 Sign up
               </Link>
             </>
           ) : (
             <>
               Already have an account?{" "}
-              <Link href="/sign-in" className="text-primary font-medium hover:underline">
+              <Link href="/login" className="text-primary font-medium hover:underline">
                 Sign in
               </Link>
             </>

@@ -1,6 +1,6 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
- 
+
 export const env = createEnv({
   server: {
     // BetterAuth
@@ -9,14 +9,14 @@ export const env = createEnv({
     // Database
     DATABASE_URL: z.string().min(1),
     // Github
-    GITHUB_CLIENT_ID: z.string().min(1),
-    GITHUB_CLIENT_SECRET: z.string().min(1),
-    // Google
+    // GITHUB_CLIENT_ID: z.string().min(1),
+    // GITHUB_CLIENT_SECRET: z.string().min(1),
+    // // Google
     GOOGLE_CLIENT_ID: z.string().min(1),
     GOOGLE_CLIENT_SECRET: z.string().min(1),
-    // Discord
-    DISCORD_CLIENT_ID: z.string().min(1),
-    DISCORD_CLIENT_SECRET: z.string().min(1),
+    // // Discord
+    // DISCORD_CLIENT_ID: z.string().min(1),
+    // DISCORD_CLIENT_SECRET: z.string().min(1),
   },
   client: {},
   experimental__runtimeEnv: {},
