@@ -35,6 +35,32 @@ export function ChatInterface() {
 
     const onSubmit = async (message: { text: string; files: any[] }, e: any) => {
         if (!message.text.trim() && message.files.length === 0) return;
+
+        if (message.files.length > 0) {
+            const formData = new FormData();
+
+            for (const file of message.files) {
+                if (file.url) {
+                    const response = await fetch(file.url);
+                    const blob = await response.blob();
+                    formData.append("files", blob, file.filename || "attachment.pdf");
+                }
+            }
+
+            const uploadPromise = fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+            });
+
+            toast.promise(uploadPromise, {
+                loading: "Uploading and processing files...",
+                success: "Files processed. Generating response...",
+                error: "Failed to upload files",
+            });
+
+            await uploadPromise;
+        }
+
         await sendMessage({ text: message.text });
     };
 

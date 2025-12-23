@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, index, vector } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -89,5 +89,43 @@ export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, {
     fields: [account.userId],
     references: [user.id],
+  }),
+}));
+
+export const documents = pgTable("documents", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  fileKey: text("file_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const embeddings = pgTable(
+  "embeddings",
+  {
+    id: text("id").primaryKey(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    embedding: vector("embedding", { dimensions: 768 }).notNull(),
+  },
+  (table) => [index("embedding_idx").using("hnsw", table.embedding.op("vector_cosine_ops"))],
+);
+
+export const documentsRelations = relations(documents, ({ one, many }) => ({
+  user: one(user, {
+    fields: [documents.userId],
+    references: [user.id],
+  }),
+  embeddings: many(embeddings),
+}));
+
+export const embeddingsRelations = relations(embeddings, ({ one }) => ({
+  document: one(documents, {
+    fields: [embeddings.documentId],
+    references: [documents.id],
   }),
 }));
