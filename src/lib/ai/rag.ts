@@ -1,11 +1,10 @@
 import { db } from "@/lib/db";
 import { embeddings as embeddingsTable } from "@/lib/db/schema";
 import { deleteFile } from "@/lib/r2";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { WebPDFLoader } from "@langchain/community/document_loaders/web/pdf";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-// @ts-ignore
-import pdf from "pdf-parse";
 import { nanoid } from "nanoid";
 
 // Initialize R2 Client (re-using config or importing if possible, but for isolation defining here or importing)
@@ -29,22 +28,26 @@ export async function processDocument(fileKey: string, documentId: string, userI
             Key: fileKey,
         });
         const response = await r2.send(command);
-        const pdfBuffer = await response.Body?.transformToByteArray();
-
-        if (!pdfBuffer) {
+        if (!response.Body) {
             throw new Error("Failed to download PDF from R2");
         }
+        const pdfBuffer = Buffer.from(await response.Body.transformToByteArray());
 
-        // 2. Parse PDF
-        const data = await pdf(Buffer.from(pdfBuffer));
-        const text = data.text;
+        // 2. Parse PDF via LangChain WebPDFLoader (pdfjs-based)
+        const pdfBlob = new Blob([pdfBuffer], { type: "application/pdf" });
+        const loader = new WebPDFLoader(pdfBlob);
+        const docs = await loader.load();
+        const textContent = docs.map((d) => d.pageContent).join("\n\n").trim();
+        if (!textContent) {
+            throw new Error("Parsed PDF text is empty");
+        }
 
         // 3. Split Text
         const splitter = new RecursiveCharacterTextSplitter({
             chunkSize: 1000,
             chunkOverlap: 200,
         });
-        const chunks = await splitter.splitText(text);
+        const chunks = await splitter.splitText(textContent);
         console.log(`Generated ${chunks.length} chunks`);
 
         // 4. Generate Embeddings & Store (Batch processing)
