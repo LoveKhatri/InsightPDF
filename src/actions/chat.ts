@@ -23,35 +23,30 @@ export async function generateChatResponse(input: string, messages: any[]) {
         throw new Error("Unauthorized");
     }
 
+    // 1. Generate Embedding for Query
+    const queryEmbedding = await geminiEmbeddings.embedQuery(input);
+
+    // 2. Retrieve Relevant Chunks
+    const similarity = sql<number>`1 - (${embeddings.embedding} <=> ${JSON.stringify(queryEmbedding)})`;
+    const chunks = await db
+        .select({
+            content: embeddings.content,
+            similarity: similarity,
+            title: documents.name, // Select the document title
+        })
+        .from(embeddings)
+        .innerJoin(documents, eq(embeddings.documentId, documents.id))
+        .where(eq(documents.userId, user.id))
+        .orderBy(cosineDistance(embeddings.embedding, queryEmbedding))
+        .limit(5);
+
+    const context = chunks.map((chunk) => chunk.content).join("\n\n");
+
+    // Extract unique source titles
+    const uniqueSources = Array.from(new Set(chunks.map(chunk => chunk.title)));
+
     (async () => {
         try {
-            // 1. Generate Embedding for Query
-            const queryEmbedding = await geminiEmbeddings.embedQuery(input);
-
-            // 2. Retrieve Relevant Chunks
-            const similarity = sql<number>`1 - (${embeddings.embedding} <=> ${JSON.stringify(queryEmbedding)})`;
-            const chunks = await db
-                .select({
-                    content: embeddings.content,
-                    similarity: similarity,
-                    title: documents.name, // Select the document title
-                })
-                .from(embeddings)
-                .innerJoin(documents, eq(embeddings.documentId, documents.id))
-                .where(eq(documents.userId, user.id))
-                .orderBy(cosineDistance(embeddings.embedding, queryEmbedding))
-                .limit(5);
-
-            const context = chunks.map((chunk) => chunk.content).join("\n\n");
-
-            // Extract unique source titles
-            const uniqueSources = Array.from(new Set(chunks.map(chunk => chunk.title)));
-
-            // Prepend sources if any were found
-            if (uniqueSources.length > 0) {
-                stream.update(`**Sources:** ${uniqueSources.map(s => `\`${s}\``).join(', ')}\n\n`);
-            }
-
             // 3. Generate Response
             const { textStream } = streamText({
                 model: google("gemini-2.0-flash-lite"),
@@ -98,5 +93,5 @@ ${context}`,
         }
     })();
 
-    return { output: stream.value };
+    return { output: stream.value, sources: uniqueSources };
 }

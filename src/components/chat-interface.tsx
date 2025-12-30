@@ -51,15 +51,20 @@ export function ChatInterface() {
 
         try {
             // 3. Call Server Action
-            const { output } = await generateChatResponse(message.text, messages);
+            const { output, sources } = await generateChatResponse(message.text, messages);
 
             // 4. Stream Response
             setStatus("streaming");
             let aiMessageContent = "";
             const aiMessageId = nanoid();
 
-            // Add initial AI message placeholder
-            setMessages(curr => [...curr, { role: 'assistant', content: '', id: aiMessageId }]);
+            // Add initial AI message placeholder with sources
+            setMessages(curr => [...curr, {
+                role: 'assistant',
+                content: '',
+                id: aiMessageId,
+                sources: sources // Store sources here
+            }]);
 
             for await (const delta of readStreamableValue(output)) {
                 aiMessageContent += delta;
@@ -147,6 +152,16 @@ export function ChatInterface() {
                                                                 : "")}
                                                     </ReactMarkdown>
                                                 </div>
+                                                {(m as any).sources && (m as any).sources.length > 0 && (
+                                                    <div className="mt-4 flex flex-wrap gap-2">
+                                                        {(m as any).sources.map((source: string, idx: number) => (
+                                                            <div key={idx} className="text-xs bg-black/5 dark:bg-white/10 px-2 py-1 rounded-md text-muted-foreground flex items-center gap-1">
+                                                                <span className="font-medium">Source:</span>
+                                                                <span className="truncate max-w-[200px]">{source}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
