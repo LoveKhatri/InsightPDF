@@ -1,11 +1,10 @@
 import * as schema from "@/lib/db/schema";
-import { env } from "@/env";
 import { drizzle } from 'drizzle-orm/node-postgres';
 
 // You can specify any property from the node-postgres connection options
 const db = drizzle({
     connection: {
-        connectionString: env.DATABASE_URL,
+        connectionString: process.env.DATABASE_URL!,
     },
     schema: schema,
 });
