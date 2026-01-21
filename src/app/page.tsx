@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { ArrowRight, Bot, Cpu, FileText, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ThemeToggler from "@/components/theme/toggler";
 
 export default function Home() {
     const { data: session, isPending } = useSession();
@@ -30,12 +31,12 @@ export default function Home() {
                 </nav>
 
                 <div className="flex items-center gap-4">
-                    {/* Placeholder for theme toggle or other header items */}
+                    <ThemeToggler />
                 </div>
             </header>
 
             {/* Hero Section */}
-            <main className="flex-1 flex flex-col items-center justify-center text-center px-4 relative z-10 -mt-20">
+            <main className="flex-1 flex flex-col items-center justify-center text-center px-4 relative z-10 pt-20 md:pt-0 md:-mt-20">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/5 bg-white/5 px-3 py-1 text-sm text-zinc-400 mb-8 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-1000">
                     <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
                     Input: PDF • Output: Intelligence
